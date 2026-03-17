@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 
 /* ─── Layout constants ─── */
@@ -519,7 +519,7 @@ const UPSETS: UpsetRow[] = [
 /* ─────────────────────────────────────────────────────────────────
    RegionSummaryPill
    ───────────────────────────────────────────────────────────────── */
-function RegionSummaryPill({ r }: { r: RegionKey }): JSX.Element {
+function RegionSummaryPill({ r }: { r: RegionKey }): React.JSX.Element {
   return (
     <div
       style={{
@@ -548,7 +548,7 @@ function RegionSummaryPill({ r }: { r: RegionKey }): JSX.Element {
 /* ─────────────────────────────────────────────────────────────────
    RegionView
    ───────────────────────────────────────────────────────────────── */
-function RegionView({ regionKey }: { regionKey: RegionKey }): JSX.Element {
+function RegionView({ regionKey }: { regionKey: RegionKey }): React.JSX.Element {
   const region = B[regionKey];
   return (
     <div className="tab-panel">
@@ -609,7 +609,7 @@ function RegionView({ regionKey }: { regionKey: RegionKey }): JSX.Element {
 /* ─────────────────────────────────────────────────────────────────
    FinalFourView
    ───────────────────────────────────────────────────────────────── */
-function FinalFourView(): JSX.Element {
+function FinalFourView(): React.JSX.Element {
   const accent = '#c084fc';
 
   const divider = (
@@ -837,7 +837,7 @@ function FinalFourView(): JSX.Element {
 /* ─────────────────────────────────────────────────────────────────
    Root component
    ───────────────────────────────────────────────────────────────── */
-export default function Bracket(): JSX.Element {
+export default function Bracket(): React.JSX.Element {
   const [tab, setTab] = useState<TabKey>('east');
 
   useEffect(() => {
