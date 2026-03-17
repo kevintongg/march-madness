@@ -213,7 +213,9 @@ function GameCard({
               alignItems: 'center',
               padding: '0 8px',
               gap: 6,
-              background: isWinner ? `${accent}${isLight ? '22' : '18'}` : 'transparent',
+              background: isWinner
+                ? `${accent}${isLight ? '22' : '18'}`
+                : 'transparent',
               borderBottom: i === 0 ? '1px solid var(--line)' : 'none',
               borderLeft: isWinner
                 ? `3px solid ${accent}`
@@ -252,9 +254,7 @@ function GameCard({
               }
               onMouseLeave={reach ? () => tooltip.hide() : undefined}
               style={{
-                color: isWinner
-                  ? isLight ? accent : '#fff'
-                  : 'var(--text)',
+                color: isWinner ? (isLight ? accent : '#fff') : 'var(--text)',
                 fontWeight: isWinner ? 600 : 400,
                 fontSize: 13.5,
                 whiteSpace: 'nowrap',
@@ -1414,24 +1414,7 @@ function BracketInner(): React.JSX.Element {
         >
           NCAA Men's Tournament
         </div>
-        <h1
-          style={
-            {
-              fontSize: 38,
-              fontWeight: 900,
-              margin: 0,
-              letterSpacing: -0.5,
-              fontFamily: "'Barlow Condensed', sans-serif",
-              background:
-                'linear-gradient(100deg, #60a5fa 0%, #e2e8f0 50%, #fb923c 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              lineHeight: 1.1,
-            } as CSSProperties
-          }
-        >
-          2026 March Madness
-        </h1>
+        <h1 className="bracket-title">2026 March Madness</h1>
 
         {/* Champion badge */}
         <div

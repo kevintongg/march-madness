@@ -136,6 +136,28 @@ body {
   animation: crownPulse 2.8s ease-in-out infinite;
 }
 
+/* gradient title */
+.bracket-title {
+  font-size: 38px;
+  font-weight: 900;
+  margin: 0;
+  letter-spacing: -0.5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  line-height: 1.1;
+  background: linear-gradient(100deg, #60a5fa 0%, #e2e8f0 50%, #fb923c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.bracket-root.light .bracket-title {
+  background: linear-gradient(100deg, #1d4ed8 0%, #d97706 50%, #ea580c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
 /* ── Sim tooltip ── */
 .sim-tooltip {
   position: fixed;
