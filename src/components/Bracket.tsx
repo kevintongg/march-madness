@@ -169,6 +169,8 @@ function GameCard({
 }: GameCardProps) {
   const rowH = GAME_H / 2;
   const tooltip = useContext(TooltipContext);
+  const { theme } = useContext(ThemeContext);
+  const isLight = theme === 'light';
 
   // Sim agreement for this game: did the sim pick the same winner we picked?
   const agree =
@@ -185,7 +187,9 @@ function GameCard({
         borderRadius: 'var(--radius-sm)',
         overflow: 'hidden',
         border: '1px solid var(--line)',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.35)',
+        boxShadow: isLight
+          ? '0 1px 4px rgba(0,0,0,0.10)'
+          : '0 2px 12px rgba(0,0,0,0.35)',
       }}
     >
       {([top, bot] as Team[]).map((team, i) => {
@@ -209,7 +213,7 @@ function GameCard({
               alignItems: 'center',
               padding: '0 8px',
               gap: 6,
-              background: isWinner ? `${accent}18` : 'transparent',
+              background: isWinner ? `${accent}${isLight ? '22' : '18'}` : 'transparent',
               borderBottom: i === 0 ? '1px solid var(--line)' : 'none',
               borderLeft: isWinner
                 ? `3px solid ${accent}`
@@ -248,7 +252,9 @@ function GameCard({
               }
               onMouseLeave={reach ? () => tooltip.hide() : undefined}
               style={{
-                color: isWinner ? '#fff' : 'var(--text)',
+                color: isWinner
+                  ? isLight ? accent : '#fff'
+                  : 'var(--text)',
                 fontWeight: isWinner ? 600 : 400,
                 fontSize: 13.5,
                 whiteSpace: 'nowrap',
@@ -1063,6 +1069,8 @@ function FinalFourView({
   simResults?: SimResults;
 }): React.JSX.Element {
   const accent = '#c084fc';
+  const { theme } = useContext(ThemeContext);
+  const isLight = theme === 'light';
 
   const divider = (
     <div
@@ -1218,7 +1226,7 @@ function FinalFourView({
           {
             textAlign: 'center',
             padding: '26px 48px',
-            background: '#1a2e4a',
+            background: isLight ? 'var(--bg1)' : '#1a2e4a',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid rgba(245,200,66,0.45)',
             width: '100%',
@@ -1229,7 +1237,7 @@ function FinalFourView({
           style={{
             fontSize: 14,
             letterSpacing: 4,
-            color: '#d4a8ff',
+            color: isLight ? '#7c3aed' : '#d4a8ff',
             textTransform: 'uppercase',
             marginBottom: 12,
             fontFamily: "'Barlow Condensed', sans-serif",
@@ -1242,11 +1250,11 @@ function FinalFourView({
           style={{
             fontSize: 42,
             fontWeight: 900,
-            color: '#ffd84d',
+            color: isLight ? '#92400e' : '#ffd84d',
             letterSpacing: -0.5,
             fontFamily: "'Barlow Condensed', sans-serif",
             lineHeight: 1.1,
-            textShadow: '0 0 40px rgba(255,210,60,0.25)',
+            textShadow: isLight ? 'none' : '0 0 40px rgba(255,210,60,0.25)',
           }}
         >
           🏆 Michigan
