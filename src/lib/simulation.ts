@@ -31,13 +31,13 @@ const BLEND_ALPHA = 0.6;
  */
 const HISTORICAL_R64: Record<string, number> = {
   '1v16': 0.013,
-  '2v15': 0.060,
-  '3v14': 0.150,
-  '4v13': 0.210,
-  '5v12': 0.350,
-  '6v11': 0.370,
-  '7v10': 0.390,
-  '8v9':  0.487,
+  '2v15': 0.06,
+  '3v14': 0.15,
+  '4v13': 0.21,
+  '5v12': 0.35,
+  '6v11': 0.37,
+  '7v10': 0.39,
+  '8v9': 0.487,
 };
 
 /* ─── Manual bracket picks for agree% tracking ────────────────── */
@@ -131,7 +131,7 @@ const MANUAL_PICKS: Record<string, string> = {
   'south-r3-g0': 'Houston',
 
   // Final Four semis
-  'ff-r4-g0': 'Duke',     // East vs South
+  'ff-r4-g0': 'Duke', // East vs South
   'ff-r4-g1': 'Michigan', // Midwest vs West
   // Championship
   'ff-r5-g0': 'Michigan',
@@ -170,11 +170,7 @@ function momentumDecay(round: number): number {
 
 /** Effective KenPom-equivalent rating for a team at a given round. */
 function getAdjRating(team: SimTeam, round: number): number {
-  return (
-    team.rating +
-    team.injuryAdj +
-    team.momentumAdj * momentumDecay(round)
-  );
+  return team.rating + team.injuryAdj + team.momentumAdj * momentumDecay(round);
 }
 
 /**
@@ -193,9 +189,8 @@ function winProb(a: SimTeam, b: SimTeam, round: number): number {
   const hiSeed = Math.max(a.seed, b.seed);
   const key = `${loSeed}v${hiSeed}`;
   const historicalUnderdogRate = HISTORICAL_R64[key] ?? 0.5;
-  const pHistorical = a.seed > b.seed
-    ? historicalUnderdogRate
-    : 1 - historicalUnderdogRate;
+  const pHistorical =
+    a.seed > b.seed ? historicalUnderdogRate : 1 - historicalUnderdogRate;
 
   return BLEND_ALPHA * pKenpom + (1 - BLEND_ALPHA) * pHistorical;
 }
@@ -226,7 +221,7 @@ function simulateOnce(): Record<string, string> {
     // Each element is [teamA, teamB]; after each round it becomes [winnerA, winnerB]
     // for the next round's matchup pairings.
     let matchups: [SimTeam, SimTeam][] = INITIAL_BRACKET[region].map(
-      ([a, b]) => [a, b],
+      ([a, b]) => [a, b]
     );
 
     for (let round = 0; round < 4; round++) {
@@ -320,7 +315,7 @@ export function runMonteCarlo(n = 10_000): SimResults {
 
   for (const name of Object.keys(champCount)) {
     champPct[name] = champCount[name] / n;
-    roundReach[name] = (roundCount[name] ?? [0,0,0,0,0,0]).map(c => c / n);
+    roundReach[name] = (roundCount[name] ?? [0, 0, 0, 0, 0, 0]).map(c => c / n);
   }
 
   for (const key of Object.keys(MANUAL_PICKS)) {

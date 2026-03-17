@@ -1,7 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, {
+  useState,
+  useMemo,
+  useContext,
+  createContext,
+  useCallback,
+} from 'react';
+import { createPortal } from 'react-dom';
 import type { CSSProperties } from 'react';
 import { runMonteCarlo, type SimResults } from '../lib/simulation';
-import { INITIAL_BRACKET, ALL_TEAMS, type RegionKey as SimRegionKey } from '../data/initialBracket';
+import {
+  INITIAL_BRACKET,
+  ALL_TEAMS,
+  type RegionKey as SimRegionKey,
+} from '../data/initialBracket';
+import './Bracket.css';
 
 /* ─── Layout constants ─── */
 const SLOT = 96;
@@ -31,91 +43,108 @@ type TabKey = RegionKey | 'ff';
 type UpsetRow = [string, string, string, string, string];
 
 /* ─────────────────────────────────────────────────────────────────
-   Global styles injected once
+   Tooltip context + provider
    ───────────────────────────────────────────────────────────────── */
-const GLOBAL_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap');
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
-
-:root {
-  --bg0:   #060d18;
-  --bg1:   #0d1829;
-  --bg2:   #152336;
-  --bg3:   #192840;
-  --line:  #253e5e;
-  --muted: #6b8cad;
-  --dim:   #8aaec8;
-  --body:  #b0cce4;
-  --text:  #eef4fc;
-  --gold:  #f5c842;
-  --gold2: #d4a017;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+interface TooltipData {
+  teamName: string;
+  reach: number[];
+  x: number;
+  y: number;
 }
 
-html, body { background: var(--bg0); }
-
-.bracket-root {
-  background: var(--bg0);
-  min-height: 100vh;
-  color: var(--text);
-  font-family: 'Barlow', sans-serif;
-  padding: 28px 20px 48px;
-  overflow-x: hidden;
+interface TooltipCtx {
+  show: (data: TooltipData) => void;
+  move: (x: number, y: number) => void;
+  hide: () => void;
 }
 
-/* scrollbar */
-::-webkit-scrollbar { height: 4px }
-::-webkit-scrollbar-track { background: var(--bg1) }
-::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px }
+const TooltipContext = createContext<TooltipCtx>({
+  show: () => {},
+  move: () => {},
+  hide: () => {},
+});
 
-/* tab button */
-.tab-btn {
-  padding: 7px 20px;
-  border-radius: 30px;
-  border: 1.5px solid var(--line);
-  background: transparent;
-  color: var(--body);
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: border-color .18s, color .18s, background .18s, transform .1s;
+// Round labels and bar colours for each reach index
+const REACH_ROWS: { label: string; color: string }[] = [
+  { label: 'R32', color: '#3b82f6' },
+  { label: 'S16', color: '#6366f1' },
+  { label: 'E8', color: '#8b5cf6' },
+  { label: 'F4', color: '#a855f7' },
+  { label: 'Final', color: '#ec4899' },
+  { label: 'Champ', color: '#f5c842' },
+];
+
+function SimTooltipPortal({
+  data,
+}: {
+  data: TooltipData | null;
+}): React.JSX.Element | null {
+  if (!data) return null;
+
+  const OFFSET = 14;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // Approximate tooltip dimensions — we'll pin to viewport edges
+  const W = 280;
+  const H = 170;
+  const left = Math.min(data.x + OFFSET, vw - W - 8);
+  const top = data.y + OFFSET + H > vh ? data.y - H - OFFSET : data.y + OFFSET;
+
+  return createPortal(
+    <div className="sim-tooltip" style={{ left, top }}>
+      <div className="sim-tooltip__name">{data.teamName}</div>
+      <div className="sim-tooltip__grid">
+        {REACH_ROWS.map((row, idx) => {
+          const val = data.reach[idx] ?? 0;
+          return (
+            <React.Fragment key={row.label}>
+              <span className="sim-tooltip__label">{row.label}</span>
+              <div className="sim-tooltip__bar-track">
+                <div
+                  className="sim-tooltip__bar-fill"
+                  style={{ width: `${val * 100}%`, background: row.color }}
+                />
+              </div>
+              <span
+                className="sim-tooltip__pct"
+                style={{
+                  color:
+                    idx === 5 && val >= 0.15 ? 'var(--gold)' : 'var(--body)',
+                }}
+              >
+                {Math.round(val * 100)}%
+              </span>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>,
+    document.body
+  );
 }
-.tab-btn:hover { color: var(--text); border-color: var(--body) }
-.tab-btn.active { color: #fff; transform: translateY(-1px) }
-.tab-btn:active { transform: translateY(0) scale(0.97) }
 
-/* animate tab content */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px) }
-  to   { opacity: 1; transform: translateY(0) }
-}
-.tab-panel { animation: fadeUp .22s ease both }
+function TooltipProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const [data, setData] = useState<TooltipData | null>(null);
 
-/* game card row hover */
-.game-row { transition: background .14s }
-.game-row:hover { background: rgba(255,255,255,0.03) !important }
+  const show = useCallback((d: TooltipData) => setData(d), []);
+  const move = useCallback(
+    (x: number, y: number) =>
+      setData(prev => (prev ? { ...prev, x, y } : prev)),
+    []
+  );
+  const hide = useCallback(() => setData(null), []);
 
-/* champion pulse */
-@keyframes crownPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(245,200,66,0) }
-  50%       { box-shadow: 0 0 0 8px rgba(245,200,66,0.12) }
-}
-.champion-card { animation: crownPulse 2.8s ease-in-out infinite }
-`;
-
-function injectGlobalCSS() {
-  if (typeof document === 'undefined') return;
-  if (document.getElementById('bracket-styles')) return;
-  const el = document.createElement('style');
-  el.id = 'bracket-styles';
-  el.textContent = GLOBAL_CSS;
-  document.head.appendChild(el);
+  return (
+    <TooltipContext.Provider value={{ show, move, hide }}>
+      {children}
+      <SimTooltipPortal data={data} />
+    </TooltipContext.Provider>
+  );
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -139,9 +168,11 @@ function GameCard({
   simResults,
 }: GameCardProps) {
   const rowH = GAME_H / 2;
+  const tooltip = useContext(TooltipContext);
 
   // Sim agreement for this game: did the sim pick the same winner we picked?
-  const agree = gameKey && simResults ? simResults.pickAgree[gameKey] : undefined;
+  const agree =
+    gameKey && simResults ? simResults.pickAgree[gameKey] : undefined;
   // Show divergence warning on the loser row when sim disagrees more than 50%
   const simDisagrees = agree !== undefined && agree < 0.5;
 
@@ -165,12 +196,8 @@ function GameCard({
         // Show divergence bolt on the WINNER row — flags the pick you made as questionable
         const showBolt = isWinner && simDisagrees;
 
-        // Build hover tooltip with per-round survival probabilities
+        // Per-round survival data for custom tooltip
         const reach = simResults?.roundReach[team.n];
-        const pct = (v: number) => `${Math.round(v * 100)}%`;
-        const tooltip = reach
-          ? `${team.n} — R32: ${pct(reach[0])} · S16: ${pct(reach[1])} · E8: ${pct(reach[2])} · F4: ${pct(reach[3])} · Final: ${pct(reach[4])} · Champ: ${pct(reach[5])}`
-          : undefined;
 
         return (
           <div
@@ -205,7 +232,21 @@ function GameCard({
             </span>
             {/* name */}
             <span
-              title={tooltip}
+              onMouseEnter={
+                reach
+                  ? e =>
+                      tooltip.show({
+                        teamName: team.n,
+                        reach,
+                        x: e.clientX,
+                        y: e.clientY,
+                      })
+                  : undefined
+              }
+              onMouseMove={
+                reach ? e => tooltip.move(e.clientX, e.clientY) : undefined
+              }
+              onMouseLeave={reach ? () => tooltip.hide() : undefined}
               style={{
                 color: isWinner ? '#fff' : 'var(--text)',
                 fontWeight: isWinner ? 600 : 400,
@@ -215,7 +256,7 @@ function GameCard({
                 textOverflow: 'ellipsis',
                 flex: 1,
                 fontFamily: "'Barlow', sans-serif",
-                cursor: tooltip ? 'help' : undefined,
+                cursor: reach ? 'help' : undefined,
               }}
             >
               {team.n}
@@ -694,14 +735,34 @@ function RegionView({
           flexWrap: 'wrap',
         }}
       >
-        <span style={{ fontSize: 12, color: 'var(--body)', fontFamily: "'Barlow', sans-serif" }}>
+        <span
+          style={{
+            fontSize: 12,
+            color: 'var(--body)',
+            fontFamily: "'Barlow', sans-serif",
+          }}
+        >
           ★ = First Four participant
         </span>
-        <span style={{ fontSize: 12, color: 'var(--dim)', fontFamily: "'Barlow', sans-serif" }}>
-          <span style={{ color: 'var(--gold)' }}>12.3%</span> = sim championship probability
+        <span
+          style={{
+            fontSize: 12,
+            color: 'var(--dim)',
+            fontFamily: "'Barlow', sans-serif",
+          }}
+        >
+          <span style={{ color: 'var(--gold)' }}>12.3%</span> = sim championship
+          probability
         </span>
-        <span style={{ fontSize: 12, color: 'var(--body)', fontFamily: "'Barlow', sans-serif" }}>
-          <span style={{ color: '#f59e0b' }}>⚡</span> = sim questions this pick (&lt;50% sim agreement)
+        <span
+          style={{
+            fontSize: 12,
+            color: 'var(--body)',
+            fontFamily: "'Barlow', sans-serif",
+          }}
+        >
+          <span style={{ color: '#f59e0b' }}>⚡</span> = sim questions this pick
+          (&lt;50% sim agreement)
         </span>
       </div>
     </div>
@@ -709,14 +770,29 @@ function RegionView({
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   Theme context
+   ───────────────────────────────────────────────────────────────── */
+type Theme = 'dark' | 'light';
+const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({
+  theme: 'dark',
+  toggle: () => {},
+});
+
+/* ─────────────────────────────────────────────────────────────────
    SimLeaderboard
    ───────────────────────────────────────────────────────────────── */
 
 // Build region and metadata maps once (module scope — these are constants)
 const TEAM_REGION: Record<string, SimRegionKey> = {};
-const TEAM_META: Record<string, { seed: number; injuryAdj: number; momentumAdj: number }> = {};
+const TEAM_META: Record<
+  string,
+  { seed: number; injuryAdj: number; momentumAdj: number }
+> = {};
 
-for (const [regionKey, pairs] of Object.entries(INITIAL_BRACKET) as [SimRegionKey, typeof INITIAL_BRACKET[SimRegionKey]][]) {
+for (const [regionKey, pairs] of Object.entries(INITIAL_BRACKET) as [
+  SimRegionKey,
+  (typeof INITIAL_BRACKET)[SimRegionKey],
+][]) {
   for (const [a, b] of pairs) {
     TEAM_REGION[a.name] = regionKey;
     TEAM_REGION[b.name] = regionKey;
@@ -743,7 +819,11 @@ const REGION_SHORT: Record<SimRegionKey, string> = {
   south: 'S',
 };
 
-function SimLeaderboard({ simResults }: { simResults: SimResults }): React.JSX.Element {
+function SimLeaderboard({
+  simResults,
+}: {
+  simResults: SimResults;
+}): React.JSX.Element {
   const maxChamp = Math.max(...Object.values(simResults.champPct));
 
   const rows = Object.entries(simResults.champPct)
@@ -829,12 +909,20 @@ function SimLeaderboard({ simResults }: { simResults: SimResults }): React.JSX.E
               alignItems: 'center',
               paddingTop: 7,
               paddingBottom: 7,
-              borderBottom: idx < rows.length - 1 ? '1px solid var(--line)' : 'none',
+              borderBottom:
+                idx < rows.length - 1 ? '1px solid var(--line)' : 'none',
             }}
           >
             {/* Team name + seed + bar */}
             <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  marginBottom: 3,
+                }}
+              >
                 <span
                   style={{
                     fontSize: 12,
@@ -905,7 +993,12 @@ function SimLeaderboard({ simResults }: { simResults: SimResults }): React.JSX.E
                 fontSize: 14,
                 fontFamily: "'Barlow Condensed', sans-serif",
                 fontWeight: 700,
-                color: champPct >= 0.15 ? 'var(--gold)' : champPct >= 0.08 ? 'var(--text)' : 'var(--dim)',
+                color:
+                  champPct >= 0.15
+                    ? 'var(--gold)'
+                    : champPct >= 0.08
+                      ? 'var(--text)'
+                      : 'var(--dim)',
                 textAlign: 'right',
                 lineHeight: 1,
               }}
@@ -946,10 +1039,10 @@ function SimLeaderboard({ simResults }: { simResults: SimResults }): React.JSX.E
                 isInjured && isCold
                   ? 'Injury concern + cold streak'
                   : isInjured
-                  ? 'Injury concern'
-                  : isCold
-                  ? 'Cold entering tournament'
-                  : ''
+                    ? 'Injury concern'
+                    : isCold
+                      ? 'Cold entering tournament'
+                      : ''
               }
             >
               {isInjured ? '🩹' : isCold ? '❄' : ''}
@@ -964,7 +1057,11 @@ function SimLeaderboard({ simResults }: { simResults: SimResults }): React.JSX.E
 /* ─────────────────────────────────────────────────────────────────
    FinalFourView
    ───────────────────────────────────────────────────────────────── */
-function FinalFourView({ simResults }: { simResults?: SimResults }): React.JSX.Element {
+function FinalFourView({
+  simResults,
+}: {
+  simResults?: SimResults;
+}): React.JSX.Element {
   const accent = '#c084fc';
 
   const divider = (
@@ -1065,53 +1162,54 @@ function FinalFourView({ simResults }: { simResults?: SimResults }): React.JSX.E
       />
 
       {/* Probability bar */}
-      {simResults && (() => {
-        const pA = simResults.champPct[FF.final[0].n] ?? 0;
-        const pB = simResults.champPct[FF.final[1].n] ?? 0;
-        const total = pA + pB || 1;
-        const pctA = pA / total;
-        return (
-          <div style={{ width: CARD_W, marginTop: 6 }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontSize: 11,
-                fontFamily: "'Barlow Condensed', sans-serif",
-                fontWeight: 700,
-                color: 'var(--dim)',
-                marginBottom: 4,
-                letterSpacing: 0.5,
-              }}
-            >
-              <span style={{ color: pA > pB ? 'var(--gold)' : 'var(--dim)' }}>
-                {(pA * 100).toFixed(1)}%
-              </span>
-              <span style={{ fontSize: 10, opacity: 0.6 }}>SIM CHAMP %</span>
-              <span style={{ color: pB > pA ? 'var(--gold)' : 'var(--dim)' }}>
-                {(pB * 100).toFixed(1)}%
-              </span>
-            </div>
-            <div
-              style={{
-                height: 5,
-                borderRadius: 3,
-                background: 'var(--bg3)',
-                overflow: 'hidden',
-                display: 'flex',
-              }}
-            >
+      {simResults &&
+        (() => {
+          const pA = simResults.champPct[FF.final[0].n] ?? 0;
+          const pB = simResults.champPct[FF.final[1].n] ?? 0;
+          const total = pA + pB || 1;
+          const pctA = pA / total;
+          return (
+            <div style={{ width: CARD_W, marginTop: 6 }}>
               <div
                 style={{
-                  width: `${pctA * 100}%`,
-                  background: accent,
-                  transition: 'width 0.4s ease',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 11,
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 700,
+                  color: 'var(--dim)',
+                  marginBottom: 4,
+                  letterSpacing: 0.5,
                 }}
-              />
+              >
+                <span style={{ color: pA > pB ? 'var(--gold)' : 'var(--dim)' }}>
+                  {(pA * 100).toFixed(1)}%
+                </span>
+                <span style={{ fontSize: 10, opacity: 0.6 }}>SIM CHAMP %</span>
+                <span style={{ color: pB > pA ? 'var(--gold)' : 'var(--dim)' }}>
+                  {(pB * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div
+                style={{
+                  height: 5,
+                  borderRadius: 3,
+                  background: 'var(--bg3)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${pctA * 100}%`,
+                    background: accent,
+                    transition: 'width 0.4s ease',
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       {/* Champion callout */}
       <div
@@ -1250,19 +1348,57 @@ function FinalFourView({ simResults }: { simResults?: SimResults }): React.JSX.E
 /* ─────────────────────────────────────────────────────────────────
    Root component
    ───────────────────────────────────────────────────────────────── */
-export default function Bracket(): React.JSX.Element {
+function BracketInner(): React.JSX.Element {
   const [tab, setTab] = useState<TabKey>('east');
-
-  useEffect(() => {
-    injectGlobalCSS();
-  }, []);
+  const { theme, toggle } = useContext(ThemeContext);
 
   const simResults = useMemo(() => runMonteCarlo(10_000), []);
 
   return (
-    <div className="bracket-root">
+    <div className={`bracket-root${theme === 'light' ? ' light' : ''}`}>
       {/* ── Header ── */}
-      <div style={{ textAlign: 'center', marginBottom: 22 }}>
+      <div
+        style={{ position: 'relative', textAlign: 'center', marginBottom: 22 }}
+      >
+        {/* Theme toggle */}
+        <button
+          onClick={toggle}
+          title={
+            theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+          }
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            background: 'var(--bg2)',
+            border: '1px solid var(--line)',
+            borderRadius: 8,
+            width: 36,
+            height: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: 17,
+            lineHeight: 1,
+            color: 'var(--body)',
+            transition: 'background .18s, border-color .18s, color .18s',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.background =
+              'var(--bg3)';
+            (e.currentTarget as HTMLButtonElement).style.borderColor =
+              'var(--muted)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.background =
+              'var(--bg2)';
+            (e.currentTarget as HTMLButtonElement).style.borderColor =
+              'var(--line)';
+          }}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
         <div
           style={{
             fontSize: 13,
@@ -1366,10 +1502,30 @@ export default function Bracket(): React.JSX.Element {
 
       {/* ── Tab panels ── */}
       {tab !== 'ff' ? (
-        <RegionView key={tab} regionKey={tab as RegionKey} simResults={simResults} />
+        <RegionView
+          key={tab}
+          regionKey={tab as RegionKey}
+          simResults={simResults}
+        />
       ) : (
         <FinalFourView key="ff" simResults={simResults} />
       )}
     </div>
+  );
+}
+
+export default function Bracket(): React.JSX.Element {
+  const [theme, setTheme] = useState<Theme>('dark');
+  const toggle = useCallback(
+    () => setTheme(t => (t === 'dark' ? 'light' : 'dark')),
+    []
+  );
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggle }}>
+      <TooltipProvider>
+        <BracketInner />
+      </TooltipProvider>
+    </ThemeContext.Provider>
   );
 }

@@ -35,7 +35,7 @@ function t(
   rating: number,
   injuryAdj = 0,
   momentumAdj = 0,
-  notes = '',
+  notes = ''
 ): SimTeam {
   return { seed, name, rating, injuryAdj, momentumAdj, notes };
 }
@@ -48,8 +48,14 @@ function t(
 const east: RegionBracket = [
   // 1 vs 16 (First Four winner — Siena won, KenPom ~192)
   [
-    t(1, 'Duke', 38.9, -2.5, 1.0,
-      'Foster (starter PG) out w/ foot fracture; Ngongba (C, 10.7 ppg) day-to-day; won ACC tournament'),
+    t(
+      1,
+      'Duke',
+      38.9,
+      -2.5,
+      1.0,
+      'Foster (starter PG) out w/ foot fracture; Ngongba (C, 10.7 ppg) day-to-day; won ACC tournament'
+    ),
     t(16, 'Siena', 2.0),
   ],
   // 8 vs 9
@@ -62,7 +68,10 @@ const east: RegionBracket = [
   // 4 vs 13
   [t(4, 'Kansas', 23.0), t(13, 'Cal Baptist', 8.5)],
   // 6 vs 11
-  [t(6, 'Louisville', 24.0), t(11, 'S. Florida', 16.5, 0, 0.5, 'Won American Athletic tournament')],
+  [
+    t(6, 'Louisville', 24.0),
+    t(11, 'S. Florida', 16.5, 0, 0.5, 'Won American Athletic tournament'),
+  ],
   // 3 vs 14
   [t(3, 'Michigan St.', 29.5), t(14, 'NDSU', 8.0)],
   // 7 vs 10
@@ -75,18 +84,33 @@ const east: RegionBracket = [
 const west: RegionBracket = [
   // 1 vs 16
   [
-    t(1, 'Arizona', 37.5, -0.5, 0.5,
-      'Bradley (Big 12 POY) playing through hand/thumb brace but won tournament MVP with it; won Big 12 tournament'),
+    t(
+      1,
+      'Arizona',
+      37.5,
+      -0.5,
+      0.5,
+      'Bradley (Big 12 POY) playing through hand/thumb brace but won tournament MVP with it; won Big 12 tournament'
+    ),
     t(16, 'LIU', 1.5),
   ],
   // 8 vs 9
   [t(8, 'Villanova', 20.0), t(9, 'Utah State', 20.5)],
   // 5 vs 12
-  [t(5, 'Wisconsin', 23.0), t(12, 'High Point', 10.0, 0, 0.5, 'Won Big South tournament, 30-4 record')],
+  [
+    t(5, 'Wisconsin', 23.0),
+    t(12, 'High Point', 10.0, 0, 0.5, 'Won Big South tournament, 30-4 record'),
+  ],
   // 4 vs 13
   [
-    t(4, 'Arkansas', 24.5, -0.5, 1.5,
-      'Acuff ankle injury; won SEC tournament (first since 2000)'),
+    t(
+      4,
+      'Arkansas',
+      24.5,
+      -0.5,
+      1.5,
+      'Acuff ankle injury; won SEC tournament (first since 2000)'
+    ),
     t(13, 'Hawaii', 8.0, 0, 0.5, 'Won Big West tournament'),
   ],
   // 6 vs 11  (Texas★ = First Four winner)
@@ -97,8 +121,14 @@ const west: RegionBracket = [
   [t(7, 'Miami (FL)', 20.5), t(10, 'Missouri', 16.0)],
   // 2 vs 15
   [
-    t(2, 'Purdue', 31.2, 0, 2.5,
-      'Won Big Ten tournament as #7 seed; beat #3 Michigan 80-72 in final on Mar 15'),
+    t(
+      2,
+      'Purdue',
+      31.2,
+      0,
+      2.5,
+      'Won Big Ten tournament as #7 seed; beat #3 Michigan 80-72 in final on Mar 15'
+    ),
     t(15, 'Queens', 3.0),
   ],
 ];
@@ -107,22 +137,47 @@ const west: RegionBracket = [
 const midwest: RegionBracket = [
   // 1 vs 16  (Howard★ = First Four winner)
   [
-    t(1, 'Michigan', 37.6, 0, -1.0,
-      'Lost Big Ten final to 7-seed Purdue on Mar 15, day before Selection Sunday'),
+    t(
+      1,
+      'Michigan',
+      37.6,
+      0,
+      -1.0,
+      'Lost Big Ten final to 7-seed Purdue on Mar 15, day before Selection Sunday'
+    ),
     t(16, 'Howard★', 2.0),
   ],
   // 8 vs 9
   [t(8, 'Georgia', 20.5), t(9, 'Saint Louis', 18.0)],
   // 5 vs 12
   [
-    t(5, 'Texas Tech', 23.5, -2.0, 0,
-      'JT Toppin (21.8 ppg, 10.8 reb) season-ending ACL Feb 17; partially priced into KenPom'),
-    t(12, 'Akron', 14.0, 0, 1.0, '3rd consecutive MAC title, program-record 29 wins'),
+    t(
+      5,
+      'Texas Tech',
+      23.5,
+      -2.0,
+      0,
+      'JT Toppin (21.8 ppg, 10.8 reb) season-ending ACL Feb 17; partially priced into KenPom'
+    ),
+    t(
+      12,
+      'Akron',
+      14.0,
+      0,
+      1.0,
+      '3rd consecutive MAC title, program-record 29 wins'
+    ),
   ],
   // 4 vs 13
   [
-    t(4, 'Alabama', 25.0, -5.5, 0,
-      'Aden Holloway (16.8 ppg, 43.8% 3PT, #2 scorer) removed from team after drug arrest; confirmed out'),
+    t(
+      4,
+      'Alabama',
+      25.0,
+      -5.5,
+      0,
+      'Aden Holloway (16.8 ppg, 43.8% 3PT, #2 scorer) removed from team after drug arrest; confirmed out'
+    ),
     t(13, 'Hofstra', 10.5),
   ],
   // 6 vs 11  (SMU★ = First Four winner)
@@ -141,8 +196,7 @@ const midwest: RegionBracket = [
 const south: RegionBracket = [
   // 1 vs 16  (Prairie View★ = First Four winner)
   [
-    t(1, 'Florida', 33.8, 0, -0.5,
-      'Lost SEC tournament final to Arkansas'),
+    t(1, 'Florida', 33.8, 0, -0.5, 'Lost SEC tournament final to Arkansas'),
     t(16, 'Prairie View★', 0.5),
   ],
   // 8 vs 9
@@ -152,13 +206,22 @@ const south: RegionBracket = [
   // 4 vs 13
   [t(4, 'Nebraska', 26.5), t(13, 'Troy', 6.0)],
   // 6 vs 11
-  [t(6, 'N. Carolina', 21.0), t(11, 'VCU', 17.0, 0, 0.5, 'Won A-10 tournament')],
+  [
+    t(6, 'N. Carolina', 21.0),
+    t(11, 'VCU', 17.0, 0, 0.5, 'Won A-10 tournament'),
+  ],
   // 3 vs 14
-  [t(3, 'Illinois', 32.1), t(14, 'Penn', 5.0, 0, 0.5, 'Won Ivy League tournament in OT')],
+  [
+    t(3, 'Illinois', 32.1),
+    t(14, 'Penn', 5.0, 0, 0.5, 'Won Ivy League tournament in OT'),
+  ],
   // 7 vs 10
   [t(7, "St. Mary's", 22.0), t(10, 'Texas A&M', 18.5)],
   // 2 vs 15
-  [t(2, 'Houston', 33.4), t(15, 'Idaho', 6.0, 0, 0.5, 'Won Big Sky tournament')],
+  [
+    t(2, 'Houston', 33.4),
+    t(15, 'Idaho', 6.0, 0, 0.5, 'Won Big Sky tournament'),
+  ],
 ];
 
 export const INITIAL_BRACKET: Record<RegionKey, RegionBracket> = {
@@ -170,5 +233,5 @@ export const INITIAL_BRACKET: Record<RegionKey, RegionBracket> = {
 
 /** Flat list of all 64 tournament teams (for initializing result counters) */
 export const ALL_TEAMS: SimTeam[] = Object.values(INITIAL_BRACKET).flatMap(
-  region => region.flatMap(([a, b]) => [a, b]),
+  region => region.flatMap(([a, b]) => [a, b])
 );
