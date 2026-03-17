@@ -4,6 +4,7 @@ import React, {
   useContext,
   createContext,
   useCallback,
+  useRef,
 } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties } from 'react';
@@ -47,8 +48,10 @@ type UpsetRow = [string, string, string, string, string];
    ───────────────────────────────────────────────────────────────── */
 
 interface TooltipData {
-  teamName: string;
-  reach: number[];
+  teamName?: string;
+  reach?: number[];
+  /** Simple text shown instead of the bar chart (used for flag tooltips) */
+  message?: string;
   x: number;
   y: number;
 }
@@ -91,37 +94,59 @@ function SimTooltipPortal({
   const left = Math.min(data.x + OFFSET, vw - W - 8);
   const top = data.y + OFFSET + H > vh ? data.y - H - OFFSET : data.y + OFFSET;
 
-  return createPortal(
-    <div className="sim-tooltip" style={{ left, top }}>
-      <div className="sim-tooltip__name">{data.teamName}</div>
-      <div className="sim-tooltip__grid">
-        {REACH_ROWS.map((row, idx) => {
-          const val = data.reach[idx] ?? 0;
-          return (
-            <React.Fragment key={row.label}>
-              <span className="sim-tooltip__label">{row.label}</span>
-              <div className="sim-tooltip__bar-track">
-                <div
-                  className="sim-tooltip__bar-fill"
-                  style={{ width: `${val * 100}%`, background: row.color }}
-                />
-              </div>
-              <span
-                className="sim-tooltip__pct"
-                style={{
-                  color:
-                    idx === 5 && val >= 0.15 ? 'var(--gold)' : 'var(--body)',
-                }}
-              >
-                {Math.round(val * 100)}%
-              </span>
-            </React.Fragment>
-          );
-        })}
+  const content =
+    data.message && !data.reach?.length ? (
+      // Simple message tooltip (used for flag tap-to-reveal)
+      <div className="sim-tooltip sim-tooltip--message" style={{ left, top }}>
+        {data.teamName && (
+          <div className="sim-tooltip__name">{data.teamName}</div>
+        )}
+        <div
+          style={{
+            fontSize: 13,
+            color: 'var(--text)',
+            fontFamily: "'Barlow', sans-serif",
+            lineHeight: 1.5,
+          }}
+        >
+          {data.message}
+        </div>
       </div>
-    </div>,
-    document.body
-  );
+    ) : (
+      // Round-reach bar chart tooltip
+      <div className="sim-tooltip" style={{ left, top }}>
+        {data.teamName && (
+          <div className="sim-tooltip__name">{data.teamName}</div>
+        )}
+        <div className="sim-tooltip__grid">
+          {REACH_ROWS.map((row, idx) => {
+            const val = data.reach?.[idx] ?? 0;
+            return (
+              <React.Fragment key={row.label}>
+                <span className="sim-tooltip__label">{row.label}</span>
+                <div className="sim-tooltip__bar-track">
+                  <div
+                    className="sim-tooltip__bar-fill"
+                    style={{ width: `${val * 100}%`, background: row.color }}
+                  />
+                </div>
+                <span
+                  className="sim-tooltip__pct"
+                  style={{
+                    color:
+                      idx === 5 && val >= 0.15 ? 'var(--gold)' : 'var(--body)',
+                  }}
+                >
+                  {Math.round(val * 100)}%
+                </span>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+    );
+
+  return createPortal(content, document.body);
 }
 
 function TooltipProvider({
@@ -130,14 +155,25 @@ function TooltipProvider({
   children: React.ReactNode;
 }): React.JSX.Element {
   const [data, setData] = useState<TooltipData | null>(null);
+  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const show = useCallback((d: TooltipData) => setData(d), []);
+  const show = useCallback((d: TooltipData) => {
+    if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    setData(d);
+    // Auto-dismiss simple message tooltips (used for tap-to-reveal on mobile)
+    if (d.message && !d.reach) {
+      dismissTimer.current = setTimeout(() => setData(null), 3000);
+    }
+  }, []);
   const move = useCallback(
     (x: number, y: number) =>
       setData(prev => (prev ? { ...prev, x, y } : prev)),
     []
   );
-  const hide = useCallback(() => setData(null), []);
+  const hide = useCallback(() => {
+    if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    setData(null);
+  }, []);
 
   return (
     <TooltipContext.Provider value={{ show, move, hide }}>
@@ -830,6 +866,7 @@ function SimLeaderboard({
 }: {
   simResults: SimResults;
 }): React.JSX.Element {
+  const tooltip = useContext(TooltipContext);
   const maxChamp = Math.max(...Object.values(simResults.champPct));
 
   const rows = Object.entries(simResults.champPct)
@@ -863,33 +900,27 @@ function SimLeaderboard({
       </div>
 
       {/* Column headers */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 32px 60px 56px 56px 20px',
-          gap: '0 8px',
-          alignItems: 'center',
-          paddingBottom: 8,
-          marginBottom: 6,
-          borderBottom: '1px solid var(--line)',
-        }}
-      >
-        {(['Team', 'Rgn', 'Champ%', 'F4%', 'E8%', ''] as const).map((h, i) => (
-          <span
-            key={i}
-            style={{
-              fontSize: 11,
-              color: 'var(--muted)',
-              fontFamily: "'Barlow Condensed', sans-serif",
-              fontWeight: 700,
-              letterSpacing: 1,
-              textTransform: 'uppercase',
-              textAlign: i >= 2 ? 'right' : 'left',
-            }}
-          >
-            {h}
-          </span>
-        ))}
+      <div className="lb-row lb-header">
+        {(['Team', 'Rgn', 'Champ%', 'F4%', 'E8%', 'Flag'] as const).map(
+          (h, i) => (
+            <span
+              key={i}
+              className={h === 'E8%' ? 'lb-e8' : undefined}
+              style={{
+                fontSize: 11,
+                color: 'var(--muted)',
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 700,
+                letterSpacing: 1,
+                textTransform: 'uppercase',
+                // Champ%, F4%, E8% right-aligned; Team, Rgn, Flag left-aligned
+                textAlign: i >= 2 && i <= 4 ? 'right' : 'left',
+              }}
+            >
+              {h}
+            </span>
+          )
+        )}
       </div>
 
       {rows.map(([name, champPct], idx) => {
@@ -908,11 +939,8 @@ function SimLeaderboard({
         return (
           <div
             key={name}
+            className="lb-row"
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 32px 60px 56px 56px 20px',
-              gap: '0 8px',
-              alignItems: 'center',
               paddingTop: 7,
               paddingBottom: 7,
               borderBottom:
@@ -1027,6 +1055,7 @@ function SimLeaderboard({
 
             {/* E8% */}
             <span
+              className="lb-e8"
               style={{
                 fontSize: 13,
                 fontFamily: "'Barlow Condensed', sans-serif",
@@ -1038,24 +1067,200 @@ function SimLeaderboard({
               {pct(e8Pct)}
             </span>
 
-            {/* Flags */}
-            <span
-              style={{ fontSize: 11, textAlign: 'center', lineHeight: 1 }}
-              title={
+            {/* Flag emoji — hover on desktop, tap-to-reveal (3s auto-dismiss) on mobile */}
+            {(() => {
+              const flagMsg =
                 isInjured && isCold
                   ? 'Injury concern + cold streak'
                   : isInjured
                     ? 'Injury concern'
                     : isCold
                       ? 'Cold entering tournament'
-                      : ''
-              }
-            >
-              {isInjured ? '🩹' : isCold ? '❄' : ''}
-            </span>
+                      : undefined;
+              return flagMsg ? (
+                <span
+                  onMouseEnter={e =>
+                    tooltip.show({
+                      message: flagMsg,
+                      x: e.clientX,
+                      y: e.clientY,
+                    })
+                  }
+                  onMouseMove={e => tooltip.move(e.clientX, e.clientY)}
+                  onMouseLeave={() => tooltip.hide()}
+                  onClick={e => {
+                    e.stopPropagation();
+                    tooltip.show({
+                      message: flagMsg,
+                      x: e.clientX,
+                      y: e.clientY,
+                    });
+                  }}
+                  style={{
+                    fontSize: 14,
+                    lineHeight: 1,
+                    cursor: 'help',
+                    userSelect: 'none',
+                  }}
+                >
+                  {isInjured ? '🩹' : '❄️'}
+                </span>
+              ) : null;
+            })()}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   RegionProjections
+   ───────────────────────────────────────────────────────────────── */
+const REGION_KEYS_SIM: SimRegionKey[] = ['east', 'west', 'midwest', 'south'];
+const REGION_LABEL_FULL: Record<SimRegionKey, string> = {
+  east: 'East',
+  west: 'West',
+  midwest: 'Midwest',
+  south: 'South',
+};
+
+function RegionProjections({
+  simResults,
+}: {
+  simResults: SimResults;
+}): React.JSX.Element {
+  // For each region build a sorted list of [name, f4Pct] pairs
+  const regionRows = REGION_KEYS_SIM.map(region => {
+    const teams = Object.entries(TEAM_REGION)
+      .filter(([, r]) => r === region)
+      .map(([name]) => ({
+        name,
+        seed: TEAM_META[name]?.seed ?? 0,
+        f4Pct: simResults.roundReach[name]?.[3] ?? 0,
+      }))
+      .filter(t => t.f4Pct > 0)
+      .sort((a, b) => b.f4Pct - a.f4Pct)
+      .slice(0, 3);
+    return { region, teams };
+  });
+
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        background: 'var(--bg1)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--line)',
+        padding: '16px 18px',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          letterSpacing: 2.5,
+          color: 'var(--body)',
+          textTransform: 'uppercase',
+          marginBottom: 14,
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontWeight: 700,
+        }}
+      >
+        Region Projections
+      </div>
+
+      <div className="rp-grid">
+        {regionRows.map(({ region, teams }) => {
+          const color = REGION_COLORS[region];
+          return (
+            <div
+              key={region}
+              style={{
+                background: 'var(--bg2)',
+                borderRadius: 'var(--radius-sm)',
+                border: `1px solid var(--line)`,
+                borderTop: `3px solid ${color}`,
+                padding: '10px 12px',
+              }}
+            >
+              {/* Region heading */}
+              <div
+                style={{
+                  fontSize: 12,
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 700,
+                  letterSpacing: 1.5,
+                  textTransform: 'uppercase',
+                  color,
+                  marginBottom: 10,
+                }}
+              >
+                {REGION_LABEL_FULL[region]}
+              </div>
+
+              {/* Top 3 teams */}
+              {teams.map((t, i) => (
+                <div
+                  key={t.name}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 5,
+                    marginBottom: i < teams.length - 1 ? 7 : 0,
+                    minWidth: 0,
+                  }}
+                >
+                  {/* Seed — small, inline before name */}
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 700,
+                      color: 'var(--muted)',
+                      flexShrink: 0,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {t.seed}
+                  </span>
+                  {/* Name — gets all remaining space */}
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: i === 0 ? 600 : 400,
+                      color: i === 0 ? 'var(--text)' : 'var(--body)',
+                      fontFamily: "'Barlow', sans-serif",
+                      flex: 1,
+                      minWidth: 0,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {t.name}
+                  </span>
+                  {/* F4 probability */}
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontFamily: "'Barlow Condensed', sans-serif",
+                      fontWeight: 700,
+                      color: i === 0 ? color : 'var(--muted)',
+                      lineHeight: 1,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {pct(t.f4Pct)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1344,6 +1549,11 @@ function FinalFourView({
           </div>
         ))}
       </div>
+
+      {divider}
+
+      {/* Region projections */}
+      {simResults && <RegionProjections simResults={simResults} />}
 
       {divider}
 

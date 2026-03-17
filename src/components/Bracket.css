@@ -175,6 +175,11 @@ body {
   font-family: 'Barlow', sans-serif;
   animation: tooltipIn 0.12s ease both;
 }
+.sim-tooltip--message {
+  min-width: 0;
+  max-width: 260px;
+  white-space: nowrap;
+}
 
 @keyframes tooltipIn {
   from {
@@ -234,4 +239,42 @@ body {
   font-weight: 700;
   text-align: right;
   line-height: 1;
+}
+
+/* ── Region projections grid ── */
+.rp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 520px) {
+  .rp-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Sim leaderboard grid ── */
+.lb-row {
+  display: grid;
+  grid-template-columns: 1fr 32px 60px 56px 56px 24px;
+  gap: 0 8px;
+  align-items: center;
+}
+.lb-header {
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* On narrow screens collapse the E8% column to zero and tighten everything */
+@media (max-width: 520px) {
+  .lb-row {
+    grid-template-columns: 1fr 28px 52px 46px 0px 24px;
+    gap: 0 6px;
+  }
+  .lb-e8 {
+    overflow: hidden;
+    visibility: hidden;
+    padding: 0;
+  }
 }
