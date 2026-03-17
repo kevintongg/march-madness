@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { CSSProperties } from 'react';
+import { runMonteCarlo, type SimResults } from '../lib/simulation';
+import { INITIAL_BRACKET, ALL_TEAMS, type RegionKey as SimRegionKey } from '../data/initialBracket';
 
 /* ─── Layout constants ─── */
 const SLOT = 96;
@@ -124,10 +126,25 @@ interface GameCardProps {
   bot: Team;
   winner: string;
   accent?: string;
+  gameKey?: string;
+  simResults?: SimResults;
 }
 
-function GameCard({ top, bot, winner, accent = '#3b82f6' }: GameCardProps) {
+function GameCard({
+  top,
+  bot,
+  winner,
+  accent = '#3b82f6',
+  gameKey,
+  simResults,
+}: GameCardProps) {
   const rowH = GAME_H / 2;
+
+  // Sim agreement for this game: did the sim pick the same winner we picked?
+  const agree = gameKey && simResults ? simResults.pickAgree[gameKey] : undefined;
+  // Show divergence warning on the loser row when sim disagrees more than 50%
+  const simDisagrees = agree !== undefined && agree < 0.5;
+
   return (
     <div
       style={{
@@ -142,6 +159,19 @@ function GameCard({ top, bot, winner, accent = '#3b82f6' }: GameCardProps) {
     >
       {([top, bot] as Team[]).map((team, i) => {
         const isWinner = winner === team.n;
+        const champPct = simResults?.champPct[team.n] ?? 0;
+        // Show % badge if sim gives team >3% championship probability
+        const showBadge = champPct >= 0.03;
+        // Show divergence bolt on the WINNER row — flags the pick you made as questionable
+        const showBolt = isWinner && simDisagrees;
+
+        // Build hover tooltip with per-round survival probabilities
+        const reach = simResults?.roundReach[team.n];
+        const pct = (v: number) => `${Math.round(v * 100)}%`;
+        const tooltip = reach
+          ? `${team.n} — R32: ${pct(reach[0])} · S16: ${pct(reach[1])} · E8: ${pct(reach[2])} · F4: ${pct(reach[3])} · Final: ${pct(reach[4])} · Champ: ${pct(reach[5])}`
+          : undefined;
+
         return (
           <div
             key={i}
@@ -175,6 +205,7 @@ function GameCard({ top, bot, winner, accent = '#3b82f6' }: GameCardProps) {
             </span>
             {/* name */}
             <span
+              title={tooltip}
               style={{
                 color: isWinner ? '#fff' : 'var(--text)',
                 fontWeight: isWinner ? 600 : 400,
@@ -184,10 +215,42 @@ function GameCard({ top, bot, winner, accent = '#3b82f6' }: GameCardProps) {
                 textOverflow: 'ellipsis',
                 flex: 1,
                 fontFamily: "'Barlow', sans-serif",
+                cursor: tooltip ? 'help' : undefined,
               }}
             >
               {team.n}
             </span>
+            {/* sim championship % badge */}
+            {showBadge && (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  fontWeight: 700,
+                  letterSpacing: 0.3,
+                  color: champPct >= 0.15 ? 'var(--gold)' : 'var(--dim)',
+                  flexShrink: 0,
+                  lineHeight: 1,
+                }}
+              >
+                {(champPct * 100).toFixed(1)}%
+              </span>
+            )}
+            {/* divergence bolt — sim thinks the other team should win */}
+            {showBolt && (
+              <span
+                title={`Sim agrees with this pick only ${Math.round((agree ?? 0) * 100)}% of the time`}
+                style={{
+                  fontSize: 11,
+                  flexShrink: 0,
+                  lineHeight: 1,
+                  color: '#f59e0b',
+                  cursor: 'default',
+                }}
+              >
+                ⚡
+              </span>
+            )}
             {/* winner chevron */}
             {isWinner && (
               <svg
@@ -219,10 +282,18 @@ function GameCard({ top, bot, winner, accent = '#3b82f6' }: GameCardProps) {
 interface RoundColProps {
   round: Round;
   roundIdx: number;
+  regionKey: string;
   accent?: string;
+  simResults?: SimResults;
 }
 
-function RoundCol({ round, roundIdx, accent = '#3b82f6' }: RoundColProps) {
+function RoundCol({
+  round,
+  roundIdx,
+  regionKey,
+  accent = '#3b82f6',
+  simResults,
+}: RoundColProps) {
   const slotH = SLOT * Math.pow(2, roundIdx);
   const padV = (slotH - GAME_H) / 2;
   return (
@@ -262,11 +333,24 @@ function RoundCol({ round, roundIdx, accent = '#3b82f6' }: RoundColProps) {
         </div>
       </div>
 
-      {round.games.map((g, i) => (
-        <div key={i} style={{ paddingTop: padV, paddingBottom: padV }}>
-          <GameCard top={g[0]} bot={g[1]} winner={g[2]} accent={accent} />
-        </div>
-      ))}
+      {round.games.map((g, i) => {
+        // East R64 is missing game g0 (Duke's 1v16) from the display data —
+        // the sim data has it at index 0, so display games are offset by +1.
+        const simGameIdx = regionKey === 'east' && roundIdx === 0 ? i + 1 : i;
+        const gameKey = `${regionKey}-r${roundIdx}-g${simGameIdx}`;
+        return (
+          <div key={i} style={{ paddingTop: padV, paddingBottom: padV }}>
+            <GameCard
+              top={g[0]}
+              bot={g[1]}
+              winner={g[2]}
+              accent={accent}
+              gameKey={gameKey}
+              simResults={simResults}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -548,7 +632,13 @@ function RegionSummaryPill({ r }: { r: RegionKey }): React.JSX.Element {
 /* ─────────────────────────────────────────────────────────────────
    RegionView
    ───────────────────────────────────────────────────────────────── */
-function RegionView({ regionKey }: { regionKey: RegionKey }): React.JSX.Element {
+function RegionView({
+  regionKey,
+  simResults,
+}: {
+  regionKey: RegionKey;
+  simResults?: SimResults;
+}): React.JSX.Element {
   const region = B[regionKey];
   return (
     <div className="tab-panel">
@@ -586,22 +676,287 @@ function RegionView({ regionKey }: { regionKey: RegionKey }): React.JSX.Element 
               key={i}
               round={round}
               roundIdx={i}
+              regionKey={regionKey}
               accent={region.color}
+              simResults={simResults}
             />
           ))}
         </div>
       </div>
 
-      {/* First Four note */}
-      <p
+      {/* Legend */}
+      <div
         style={{
-          textAlign: 'center',
-          marginTop: 6,
-          fontSize: 13,
+          display: 'flex',
+          justifyContent: 'center',
+          gap: 20,
+          marginTop: 8,
+          flexWrap: 'wrap',
         }}
       >
-        ★ = First Four participant
-      </p>
+        <span style={{ fontSize: 12, color: 'var(--body)', fontFamily: "'Barlow', sans-serif" }}>
+          ★ = First Four participant
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--dim)', fontFamily: "'Barlow', sans-serif" }}>
+          <span style={{ color: 'var(--gold)' }}>12.3%</span> = sim championship probability
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--body)', fontFamily: "'Barlow', sans-serif" }}>
+          <span style={{ color: '#f59e0b' }}>⚡</span> = sim questions this pick (&lt;50% sim agreement)
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SimLeaderboard
+   ───────────────────────────────────────────────────────────────── */
+
+// Build region and metadata maps once (module scope — these are constants)
+const TEAM_REGION: Record<string, SimRegionKey> = {};
+const TEAM_META: Record<string, { seed: number; injuryAdj: number; momentumAdj: number }> = {};
+
+for (const [regionKey, pairs] of Object.entries(INITIAL_BRACKET) as [SimRegionKey, typeof INITIAL_BRACKET[SimRegionKey]][]) {
+  for (const [a, b] of pairs) {
+    TEAM_REGION[a.name] = regionKey;
+    TEAM_REGION[b.name] = regionKey;
+  }
+}
+for (const team of ALL_TEAMS) {
+  TEAM_META[team.name] = {
+    seed: team.seed,
+    injuryAdj: team.injuryAdj,
+    momentumAdj: team.momentumAdj,
+  };
+}
+
+const REGION_COLORS: Record<SimRegionKey, string> = {
+  east: '#3b82f6',
+  west: '#ef4444',
+  midwest: '#22c55e',
+  south: '#f97316',
+};
+const REGION_SHORT: Record<SimRegionKey, string> = {
+  east: 'E',
+  west: 'W',
+  midwest: 'MW',
+  south: 'S',
+};
+
+function SimLeaderboard({ simResults }: { simResults: SimResults }): React.JSX.Element {
+  const maxChamp = Math.max(...Object.values(simResults.champPct));
+
+  const rows = Object.entries(simResults.champPct)
+    .filter(([, pct]) => pct >= 0.005)
+    .sort(([, a], [, b]) => b - a);
+
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        background: 'var(--bg1)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--line)',
+        padding: '16px 18px',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          letterSpacing: 2.5,
+          color: 'var(--body)',
+          textTransform: 'uppercase',
+          marginBottom: 14,
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontWeight: 700,
+        }}
+      >
+        Sim Odds Leaderboard
+      </div>
+
+      {/* Column headers */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 32px 60px 56px 56px 20px',
+          gap: '0 8px',
+          alignItems: 'center',
+          paddingBottom: 8,
+          marginBottom: 6,
+          borderBottom: '1px solid var(--line)',
+        }}
+      >
+        {(['Team', 'Rgn', 'Champ%', 'F4%', 'E8%', ''] as const).map((h, i) => (
+          <span
+            key={i}
+            style={{
+              fontSize: 11,
+              color: 'var(--muted)',
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontWeight: 700,
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              textAlign: i >= 2 ? 'right' : 'left',
+            }}
+          >
+            {h}
+          </span>
+        ))}
+      </div>
+
+      {rows.map(([name, champPct], idx) => {
+        const region = TEAM_REGION[name];
+        const meta = TEAM_META[name];
+        const reach = simResults.roundReach[name] ?? [];
+        const f4Pct = reach[3] ?? 0;
+        const e8Pct = reach[2] ?? 0;
+        const color = region ? REGION_COLORS[region] : 'var(--dim)';
+        const short = region ? REGION_SHORT[region] : '?';
+        const isInjured = meta && meta.injuryAdj < 0;
+        const isCold = meta && meta.momentumAdj < 0;
+        // Progress bar width relative to the field leader
+        const barWidth = maxChamp > 0 ? champPct / maxChamp : 0;
+
+        return (
+          <div
+            key={name}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 32px 60px 56px 56px 20px',
+              gap: '0 8px',
+              alignItems: 'center',
+              paddingTop: 7,
+              paddingBottom: 7,
+              borderBottom: idx < rows.length - 1 ? '1px solid var(--line)' : 'none',
+            }}
+          >
+            {/* Team name + seed + bar */}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--muted)',
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontWeight: 700,
+                    minWidth: 16,
+                    lineHeight: 1,
+                  }}
+                >
+                  {meta?.seed ?? ''}
+                </span>
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: 'var(--text)',
+                    fontFamily: "'Barlow', sans-serif",
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {name}
+                </span>
+              </div>
+              {/* relative strength bar */}
+              <div
+                style={{
+                  height: 3,
+                  borderRadius: 2,
+                  background: 'var(--bg3)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${barWidth * 100}%`,
+                    background: color,
+                    borderRadius: 2,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Region pill */}
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 700,
+                color,
+                background: `${color}18`,
+                borderRadius: 4,
+                padding: '2px 5px',
+                textAlign: 'center',
+                letterSpacing: 0.5,
+                border: `1px solid ${color}33`,
+              }}
+            >
+              {short}
+            </div>
+
+            {/* Champ% */}
+            <span
+              style={{
+                fontSize: 14,
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 700,
+                color: champPct >= 0.15 ? 'var(--gold)' : champPct >= 0.08 ? 'var(--text)' : 'var(--dim)',
+                textAlign: 'right',
+                lineHeight: 1,
+              }}
+            >
+              {pct(champPct)}
+            </span>
+
+            {/* F4% */}
+            <span
+              style={{
+                fontSize: 13,
+                fontFamily: "'Barlow Condensed', sans-serif",
+                color: 'var(--body)',
+                textAlign: 'right',
+                lineHeight: 1,
+              }}
+            >
+              {pct(f4Pct)}
+            </span>
+
+            {/* E8% */}
+            <span
+              style={{
+                fontSize: 13,
+                fontFamily: "'Barlow Condensed', sans-serif",
+                color: 'var(--muted)',
+                textAlign: 'right',
+                lineHeight: 1,
+              }}
+            >
+              {pct(e8Pct)}
+            </span>
+
+            {/* Flags */}
+            <span
+              style={{ fontSize: 11, textAlign: 'center', lineHeight: 1 }}
+              title={
+                isInjured && isCold
+                  ? 'Injury concern + cold streak'
+                  : isInjured
+                  ? 'Injury concern'
+                  : isCold
+                  ? 'Cold entering tournament'
+                  : ''
+              }
+            >
+              {isInjured ? '🩹' : isCold ? '❄' : ''}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -609,7 +964,7 @@ function RegionView({ regionKey }: { regionKey: RegionKey }): React.JSX.Element 
 /* ─────────────────────────────────────────────────────────────────
    FinalFourView
    ───────────────────────────────────────────────────────────────── */
-function FinalFourView(): React.JSX.Element {
+function FinalFourView({ simResults }: { simResults?: SimResults }): React.JSX.Element {
   const accent = '#c084fc';
 
   const divider = (
@@ -678,6 +1033,8 @@ function FinalFourView(): React.JSX.Element {
               bot={sf.g[1]}
               winner={sf.g[2]}
               accent={accent}
+              gameKey={`ff-r4-g${i}`}
+              simResults={simResults}
             />
           </div>
         ))}
@@ -703,7 +1060,58 @@ function FinalFourView(): React.JSX.Element {
         bot={FF.final[1]}
         winner={FF.final[2]}
         accent={accent}
+        gameKey="ff-r5-g0"
+        simResults={simResults}
       />
+
+      {/* Probability bar */}
+      {simResults && (() => {
+        const pA = simResults.champPct[FF.final[0].n] ?? 0;
+        const pB = simResults.champPct[FF.final[1].n] ?? 0;
+        const total = pA + pB || 1;
+        const pctA = pA / total;
+        return (
+          <div style={{ width: CARD_W, marginTop: 6 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: 11,
+                fontFamily: "'Barlow Condensed', sans-serif",
+                fontWeight: 700,
+                color: 'var(--dim)',
+                marginBottom: 4,
+                letterSpacing: 0.5,
+              }}
+            >
+              <span style={{ color: pA > pB ? 'var(--gold)' : 'var(--dim)' }}>
+                {(pA * 100).toFixed(1)}%
+              </span>
+              <span style={{ fontSize: 10, opacity: 0.6 }}>SIM CHAMP %</span>
+              <span style={{ color: pB > pA ? 'var(--gold)' : 'var(--dim)' }}>
+                {(pB * 100).toFixed(1)}%
+              </span>
+            </div>
+            <div
+              style={{
+                height: 5,
+                borderRadius: 3,
+                background: 'var(--bg3)',
+                overflow: 'hidden',
+                display: 'flex',
+              }}
+            >
+              <div
+                style={{
+                  width: `${pctA * 100}%`,
+                  background: accent,
+                  transition: 'width 0.4s ease',
+                }}
+              />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Champion callout */}
       <div
@@ -830,6 +1238,11 @@ function FinalFourView(): React.JSX.Element {
           </div>
         ))}
       </div>
+
+      {divider}
+
+      {/* Sim odds leaderboard */}
+      {simResults && <SimLeaderboard simResults={simResults} />}
     </div>
   );
 }
@@ -843,6 +1256,8 @@ export default function Bracket(): React.JSX.Element {
   useEffect(() => {
     injectGlobalCSS();
   }, []);
+
+  const simResults = useMemo(() => runMonteCarlo(10_000), []);
 
   return (
     <div className="bracket-root">
@@ -951,9 +1366,9 @@ export default function Bracket(): React.JSX.Element {
 
       {/* ── Tab panels ── */}
       {tab !== 'ff' ? (
-        <RegionView key={tab} regionKey={tab as RegionKey} />
+        <RegionView key={tab} regionKey={tab as RegionKey} simResults={simResults} />
       ) : (
-        <FinalFourView key="ff" />
+        <FinalFourView key="ff" simResults={simResults} />
       )}
     </div>
   );
